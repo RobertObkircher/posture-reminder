@@ -4,6 +4,8 @@ Uses face recognition to remind you to sit up straight
 
 ## Usage
 
+WARNING: This project is still a work in progress. It doesn't work yet!
+
 run `./posture_reminder`
 
 Hit escape to quit.
