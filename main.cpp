@@ -10,39 +10,45 @@ int main(int argc, const char** argv)
 {
     cv::CommandLineParser parser(argc, argv,
             "{help h||}"
-            "{face_cascade|/usr/share/opencv4/haarcascades/haarcascade_frontalface_alt.xml|Path to face cascade.}"
+            "{face_cascade|/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml|Path to face cascade.}"
             "{eyes_cascade|/usr/share/opencv4/haarcascades/haarcascade_eye_tree_eyeglasses.xml|Path to eyes cascade.}"
             "{camera|0|Camera device number.}");
 
-    parser.about(
-            "\nThis program demonstrates using the cv::CascadeClassifier class to detect objects (Face + eyes) in a video stream.\n"
-            "You can use Haar or LBP features.\n\n");
-    parser.printMessage();
+    parser.about("This program uses face recognition to remind you to sit up straight.\n");
 
-    cv::String face_cascade_name = cv::samples::findFile(parser.get<cv::String>("face_cascade"));
-    cv::String eyes_cascade_name = cv::samples::findFile(parser.get<cv::String>("eyes_cascade"));
+    if (!parser.check()) {
+        parser.printErrors();
+        return -1;
+    }
+    if (!parser.get<cv::String>("help").empty()) {
+        parser.printMessage();
+        return 0;
+    }
 
     //-- 1. Load the cascades
     cv::CascadeClassifier face_cascade;
-    if (!face_cascade.load(face_cascade_name)) {
+    if (!face_cascade.load(cv::samples::findFile(parser.get<cv::String>("face_cascade")))) {
         std::cout << "--(!)Error loading face cascade\n";
         return -1;
     };
 
     cv::CascadeClassifier eyes_cascade;
-    if (!eyes_cascade.load(eyes_cascade_name)) {
+    if (!eyes_cascade.load(cv::samples::findFile(parser.get<cv::String>("eyes_cascade")))) {
         std::cout << "--(!)Error loading eyes cascade\n";
         return -1;
     };
 
     int camera_device = parser.get<int>("camera");
     cv::VideoCapture capture;
-    //-- 2. Read the video stream
-    capture.open(camera_device);
+    capture.open(camera_device, cv::CAP_V4L2);
     if (!capture.isOpened()) {
         std::cout << "--(!)Error opening video capture\n";
         return -1;
     }
+
+    capture.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
+    capture.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+    capture.set(cv::CAP_PROP_FPS, 30);
 
     cv::Mat frame;
     while (capture.read(frame)) {
@@ -71,20 +77,19 @@ void detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClass
     std::vector<cv::Rect> faces;
     face_cascade.detectMultiScale(frame_gray, faces);
 
-    for (size_t i = 0; i<faces.size(); i++) {
-        cv::Point center(faces[i].x+faces[i].width/2, faces[i].y+faces[i].height/2);
-        ellipse(frame, center, cv::Size(faces[i].width/2, faces[i].height/2), 0, 0, 360, cv::Scalar(255, 0, 255), 4);
+    for (auto const& face: faces) {
+//        cv::Point center(face.x+face.width/2, face.y+face.height/2);
+        cv::rectangle(frame, face.tl(), face.br(), cv::Scalar(255, 0, 255));
 
-        cv::Mat faceROI = frame_gray(faces[i]);
+        cv::Mat faceROI = frame_gray(face);
 
         std::vector<cv::Rect> eyes;
         eyes_cascade.detectMultiScale(faceROI, eyes);
 
-        for (size_t j = 0; j<eyes.size(); j++) {
-            cv::Point eye_center(faces[i].x+eyes[j].x+eyes[j].width/2, faces[i].y+eyes[j].y+eyes[j].height/2);
-            int radius = cvRound((eyes[j].width+eyes[j].height)*0.25);
+        for (auto const& eye: eyes) {
+            cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
+            int radius = cvRound((eye.width+eye.height)*0.25);
             circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 4);
         }
     }
-
 }
