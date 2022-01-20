@@ -3,8 +3,9 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/videoio.hpp"
 #include <iostream>
+#include <optional>
 
-void detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
+std::optional<cv::Rect> detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
 
 int main(int argc, const char** argv)
 {
@@ -50,6 +51,8 @@ int main(int argc, const char** argv)
     capture.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
     capture.set(cv::CAP_PROP_FPS, 30);
 
+    std::optional<cv::Rect> desired;
+
     cv::Mat frame;
     while (capture.read(frame)) {
         if (frame.empty()) {
@@ -57,18 +60,49 @@ int main(int argc, const char** argv)
             break;
         }
 
-        detect(frame, face_cascade, eyes_cascade);
+        std::optional<cv::Rect> postion = detect(frame, face_cascade, eyes_cascade);
+
+        if (desired.has_value()) {
+            cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 0, 255));
+        }
 
         imshow("Capture - Face detection", frame);
 
-        if (cv::pollKey()==27) {
+        int key = cv::pollKey();
+        if (key==27) {
             break;
+        } else if (key==' ') {
+            desired = postion;
+            if (desired.has_value()) {
+                std::cout << "Set desired rectangle to " << *desired << "\n";
+            } else {
+                std::cout << "Cleared desired rectangle\n";
+            }
         }
+
+        if (desired.has_value() && postion.has_value()) {
+            auto d = *desired;
+            auto p = *postion;
+
+            assert(d.width>=0);
+            assert(d.height>=0);
+            assert(p.width>=0);
+            assert(p.height>=0);
+
+            auto deltax = (d.x+d.width/2)-(p.x+p.width/2);
+            auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
+            auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
+
+            std::cout << "deltax=" << deltax << " deltay=" << deltay << " delta_size=" << delta_size << "\n";
+        } else if (desired.has_value()) {
+            std::cout << "Could not find a face\n";
+        }
+
     }
     return 0;
 }
 
-void detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
+std::optional<cv::Rect> detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
 {
     cv::Mat frame_gray;
     cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
@@ -91,5 +125,11 @@ void detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClass
             int radius = cvRound((eye.width+eye.height)*0.25);
             circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 4);
         }
+    }
+
+    if (faces.size()==1) {
+        return faces[0];
+    } else {
+        return {};
     }
 }
