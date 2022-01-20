@@ -1,21 +1,26 @@
 # posture-reminder
 
-Uses face recognition to remind you to sit up straight 
+Uses face recognition to remind you to sit up straight
 
 ## Usage
 
 WARNING: This project is still a work in progress. It doesn't work yet!
 
+![Webcam filming person sitting in front of computer](usage.png)
+
 run `./posture_reminder`
 
-Hit escape to quit.
+| Key              | Description                |
+|------------------|----------------------------|
+| <kbd>esc</kbd>   | quit w                     |
+| <kbd>space</kbd> | Set the desired position.  |
 
 ## Installation
 
 1. Make sure you have the following software:
-   - opencv: https://opencv.org/releases/
-   - a C++ compiler
- 
+    - opencv: https://opencv.org/releases/
+    - a C++ compiler
+
 2. Clone this repository or download it as a zip file
 
 2. Build:
