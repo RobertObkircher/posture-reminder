@@ -4,8 +4,10 @@
 #include "opencv2/videoio.hpp"
 #include <iostream>
 #include <optional>
+#include <deque>
 
-std::optional<cv::Rect> detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
+std::optional<cv::Rect>
+detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
 
 #define BEEP_FILE "data/beep.wav"
 
@@ -14,7 +16,7 @@ void beep()
     bool fallback = true;
 
 #ifdef __linux__
-    if(system("paplay " BEEP_FILE "&") == 0) {
+    if (system("paplay " BEEP_FILE "&")==0) {
         fallback = false;
     } else {
 
@@ -74,6 +76,10 @@ int main(int argc, const char** argv)
 
     bool calibrate = true;
 
+    const int HISTORY_SIZE = 10;
+    std::deque<cv::Rect> previous_positions;
+    std::optional<cv::Rect> average_position;
+
     cv::Mat frame;
     while (capture.read(frame)) {
         if (frame.empty()) {
@@ -81,7 +87,32 @@ int main(int argc, const char** argv)
             break;
         }
 
-        std::optional<cv::Rect> postion = detect(frame, face_cascade, eyes_cascade);
+        std::optional<cv::Rect> position = detect_single_face(frame, face_cascade, eyes_cascade);
+
+        if (position.has_value()) {
+            if (previous_positions.size()>=HISTORY_SIZE) {
+                previous_positions.pop_front();
+            }
+            previous_positions.push_back(*position);
+
+            cv::Rect average;
+            for (auto const& pos: previous_positions) {
+                average.x += pos.x;
+                average.y += pos.y;
+                average.width += pos.width;
+                average.height += pos.height;
+            }
+            int size = previous_positions.size();
+            average.x /= size;
+            average.y /= size;
+            average.width /= size;
+            average.height /= size;
+            average_position = average;
+        }
+
+        if (average_position.has_value()) {
+            cv::rectangle(frame, average_position->tl(), average_position->br(), cv::Scalar(0, 255, 0));
+        }
 
         if (desired.has_value()) {
             cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 0, 255));
@@ -96,16 +127,16 @@ int main(int argc, const char** argv)
             calibrate = true;
         }
 
-        // TOOD use multiple positions to calibrate
-        if (calibrate && postion.has_value()) {
+        // TOOD use multiple previous_positions to calibrate
+        if (calibrate && previous_positions.size()==HISTORY_SIZE && average_position.has_value()) {
             calibrate = false;
-            desired = postion;
+            desired = average_position;
             std::cout << "Set desired rectangle to " << *desired << "\n";
         }
 
-        if (desired.has_value() && postion.has_value()) {
+        if (desired.has_value() && average_position.has_value()) {
             auto d = *desired;
-            auto p = *postion;
+            auto p = *average_position;
 
             assert(d.width>=0);
             assert(d.height>=0);
@@ -128,7 +159,8 @@ int main(int argc, const char** argv)
     return 0;
 }
 
-std::optional<cv::Rect> detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
+std::optional<cv::Rect>
+detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
 {
     cv::Mat frame_gray;
     cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
