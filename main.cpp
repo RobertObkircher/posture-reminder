@@ -268,7 +268,7 @@ int main(int argc, const char** argv)
                 until = now+std::chrono::seconds(10);
                 state = State::Checking;
             } else {
-                handle_key(cv::waitKey(1000), state, State::Reset, State::Paused);
+                state = handle_key(cv::waitKey(1000), state, State::Reset, State::Paused);
             }
             break;
         }
