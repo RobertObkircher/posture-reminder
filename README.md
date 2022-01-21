@@ -4,16 +4,19 @@ Uses face recognition to remind you to sit up straight
 
 ## Usage
 
-WARNING: This project is still a work in progress. It doesn't work yet!
+WARNING: This project is still a work in progress. For now it only works on my machine.
 
 ![Webcam filming person sitting in front of computer](usage.png)
 
-run `./posture_reminder`
+Run `./posture_reminder` and sit still until the desired position of your face appears in green.
 
-| Key              | Description                |
-|------------------|----------------------------|
-| <kbd>esc</kbd>   | quit w                     |
-| <kbd>space</kbd> | Set the desired position.  |
+From now on the application will check it regularly and play a sound if your posture sucks.
+
+| Key                            | Description               |
+|--------------------------------|---------------------------|
+| <kbd>esc</kbd> or <kbd>q</kbd> | quit w                    |
+| <kbd>space</kbd>               | Set the desired position. |
+| <kbd>p</kbd>                   | pause                     |
 
 ## Installation
 

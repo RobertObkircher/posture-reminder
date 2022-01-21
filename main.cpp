@@ -57,6 +57,90 @@ detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::Casca
     }
 }
 
+void open_capture(cv::VideoCapture& capture, int camera_device)
+{
+    capture.open(camera_device, cv::CAP_V4L2);
+    if (!capture.isOpened()) {
+        std::cerr << "Error opening video capture\n";
+        return;
+    }
+
+    // without mjpg my camera can only do 5 fps at 1080p
+    capture.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    capture.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
+    capture.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
+    capture.set(cv::CAP_PROP_FPS, 30);
+
+    std::cout << "capturing with "
+              << capture.get(cv::CAP_PROP_FRAME_WIDTH) << "x"
+              << capture.get(cv::CAP_PROP_FRAME_HEIGHT) << "@"
+              << capture.get(cv::CAP_PROP_FPS) << "\n";
+}
+
+class History {
+    int m_size;
+    std::deque<cv::Rect> m_positions;
+    std::optional<cv::Rect> m_average_position;
+
+public:
+    explicit History(int size)
+            :m_size(size) { };
+
+    [[nodiscard]] std::optional<cv::Rect> average_position() const { return m_average_position; }
+
+    [[nodiscard]] bool full() const { return m_positions.size()==m_size; }
+
+    void add(cv::Rect position)
+    {
+        if (m_positions.size()>=m_size) {
+            m_positions.pop_front();
+        }
+        m_positions.push_back(position);
+
+        cv::Rect average;
+        for (auto const& pos: m_positions) {
+            average.x += pos.x;
+            average.y += pos.y;
+            average.width += pos.width;
+            average.height += pos.height;
+        }
+        int size = m_positions.size();
+        average.x /= size;
+        average.y /= size;
+        average.width /= size;
+        average.height /= size;
+        m_average_position = average;
+    }
+
+    void clear()
+    {
+        m_positions.clear();
+        m_average_position = {};
+    }
+};
+
+enum class State {
+    Quit,
+    Calibrating,
+    Reset,
+    Checking, // requires "until"
+    Paused,
+    Sleeping, // requires "until"
+};
+
+State handle_key(int key, State otherwise, State if_space, State if_p)
+{
+    if (key==27 || key=='q') {
+        return State::Quit;
+    } else if (key==' ') {
+        return if_space;
+    } else if (key=='p') {
+        return if_p;
+    } else {
+        return otherwise;
+    }
+}
+
 int main(int argc, const char** argv)
 {
     cv::CommandLineParser parser(argc, argv,
@@ -91,102 +175,105 @@ int main(int argc, const char** argv)
 
     int camera_device = parser.get<int>("camera");
     cv::VideoCapture capture;
-    capture.open(camera_device, cv::CAP_V4L2);
-    if (!capture.isOpened()) {
-        std::cout << "--(!)Error opening video capture\n";
-        return -1;
-    }
-
-    capture.set(cv::CAP_PROP_FRAME_WIDTH, 1920);
-    capture.set(cv::CAP_PROP_FRAME_HEIGHT, 1080);
-    capture.set(cv::CAP_PROP_FPS, 30);
-
-    std::optional<cv::Rect> desired;
-
-    bool calibrate = true;
-
-    const int HISTORY_SIZE = 10;
-    std::deque<cv::Rect> previous_positions;
-    std::optional<cv::Rect> average_position;
-
     cv::Mat frame;
-    while (capture.read(frame)) {
-        if (frame.empty()) {
-            std::cout << "--(!) No captured frame -- Break!\n";
+    History history{10};
+    std::optional<cv::Rect> desired;
+    std::chrono::time_point until = std::chrono::steady_clock::now();
+
+    State state = State::Reset;
+
+    while (state!=State::Quit) {
+        // process camera input
+        if (state==State::Calibrating || state==State::Checking) {
+            if (!capture.isOpened()) {
+                open_capture(capture, camera_device);
+            }
+            if (capture.isOpened()) {
+                capture.read(frame);
+                if (frame.empty()) {
+                    std::cerr << "No captured frame!\n";
+                } else {
+                    std::optional<cv::Rect> position = detect_single_face(frame, face_cascade, eyes_cascade);
+                    if (position.has_value()) {
+                        history.add(*position);
+                    }
+
+                    if (desired.has_value()) {
+                        cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 255, 0), 6);
+                    }
+                    if (history.average_position().has_value()) {
+                        cv::rectangle(frame, history.average_position()->tl(), history.average_position()->br(),
+                                cv::Scalar(255, 0, 0), 3);
+                    }
+                    imshow("posture_reminder", frame);
+                }
+            }
+        } else {
+            capture.release();
+        }
+
+        switch (state) {
+        case State::Quit: {
             break;
         }
-
-        std::optional<cv::Rect> position = detect_single_face(frame, face_cascade, eyes_cascade);
-
-        if (position.has_value()) {
-            if (previous_positions.size()>=HISTORY_SIZE) {
-                previous_positions.pop_front();
-            }
-            previous_positions.push_back(*position);
-
-            cv::Rect average;
-            for (auto const& pos: previous_positions) {
-                average.x += pos.x;
-                average.y += pos.y;
-                average.width += pos.width;
-                average.height += pos.height;
-            }
-            int size = previous_positions.size();
-            average.x /= size;
-            average.y /= size;
-            average.width /= size;
-            average.height /= size;
-            average_position = average;
-        }
-
-        for (const auto &pos : previous_positions) {
-//            cv::rectangle(frame, pos.tl(), pos.br(), cv::Scalar(255, 0,255), 1);
-        }
-        if (desired.has_value()) {
-            cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 255, 0), 6);
-        }
-        if (average_position.has_value()) {
-            cv::rectangle(frame, average_position->tl(), average_position->br(), cv::Scalar(255, 0,0), 3);
-        }
-
-
-        imshow("Capture - Face detection", frame);
-
-        int key = cv::pollKey();
-        if (key==27) {
+        case State::Reset: {
+            desired = {};
+            history.clear();
+            state = State::Calibrating;
             break;
-        } else if (key==' ') {
-            calibrate = true;
         }
+        case State::Calibrating: {
+            if (history.full() && history.average_position().has_value()) {
+                desired = history.average_position();
+                std::cout << "Set desired rectangle to " << *desired << "\n";
 
-        // TOOD use multiple previous_positions to calibrate
-        if (calibrate && previous_positions.size()==HISTORY_SIZE && average_position.has_value()) {
-            calibrate = false;
-            desired = average_position;
-            std::cout << "Set desired rectangle to " << *desired << "\n";
-        }
-
-        if (desired.has_value() && average_position.has_value()) {
-            auto d = *desired;
-            auto p = *average_position;
-
-            assert(d.width>=0);
-            assert(d.height>=0);
-            assert(p.width>=0);
-            assert(p.height>=0);
-
-            auto deltax = (d.x+d.width/2)-(p.x+p.width/2);
-            auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
-            auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
-
-            if (abs(deltay)>100 || abs(1-delta_size)>0.1) {
-                beep();
+                until = std::chrono::steady_clock::now()+std::chrono::seconds(10);
+                state = State::Checking;
+            } else {
+                state = handle_key(cv::pollKey(), state, State::Calibrating, State::Paused);
             }
-            std::cout << "deltax=" << deltax << " deltay=" << deltay << " delta_size=" << delta_size << "\n";
-        } else if (desired.has_value()) {
-            std::cout << "Could not find a face\n";
+            break;
         }
+        case State::Checking: {
+            if (desired.has_value() && history.average_position().has_value()) {
+                auto d = *desired;
+                auto p = *history.average_position();
 
+                auto deltax = (d.x+d.width/2)-(p.x+p.width/2);
+                auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
+                auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
+
+                if (abs(deltay)>100 || abs(1-delta_size)>0.1) {
+                    beep();
+                }
+                std::cout << "deltax: " << deltax << ", deltay: " << deltay << " delta_size: " << delta_size << "\n";
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            if (until<now) {
+                until = now+std::chrono::minutes(10);
+                state = State::Sleeping;
+            } else {
+                state = handle_key(cv::pollKey(), state, State::Calibrating, State::Paused);
+            }
+            break;
+        }
+        case State::Paused: {
+            state = handle_key(cv::waitKey(1000), state, State::Reset, State::Reset);
+            break;
+        }
+        case State::Sleeping: {
+            auto now = std::chrono::steady_clock::now();
+            if (until<now) {
+                until = now+std::chrono::seconds(10);
+                state = State::Checking;
+            } else {
+                handle_key(cv::waitKey(1000), state, State::Reset, State::Paused);
+            }
+            break;
+        }
+        }
     }
+
     return 0;
 }
