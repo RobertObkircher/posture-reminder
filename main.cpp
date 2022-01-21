@@ -265,6 +265,7 @@ int main(int argc, const char** argv)
         case State::Sleeping: {
             auto now = std::chrono::steady_clock::now();
             if (until<now) {
+                history.clear();
                 until = now+std::chrono::seconds(10);
                 state = State::Checking;
             } else {
