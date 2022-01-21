@@ -6,9 +6,6 @@
 #include <optional>
 #include <deque>
 
-std::optional<cv::Rect>
-detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
-
 #define BEEP_FILE "data/beep.wav"
 
 void beep()
@@ -25,6 +22,38 @@ void beep()
 
     if (fallback) {
         std::cout << "\a" << std::flush;
+    }
+}
+
+std::optional<cv::Rect>
+detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
+{
+    cv::Mat frame_gray;
+    cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
+    equalizeHist(frame_gray, frame_gray);
+
+    std::vector<cv::Rect> faces;
+    face_cascade.detectMultiScale(frame_gray, faces);
+
+    for (auto const& face: faces) {
+        cv::rectangle(frame, face.tl(), face.br(), cv::Scalar(255, 0, 255));
+
+        cv::Mat faceROI = frame_gray(face);
+
+        std::vector<cv::Rect> eyes;
+        eyes_cascade.detectMultiScale(faceROI, eyes);
+
+        for (auto const& eye: eyes) {
+            cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
+            int radius = cvRound((eye.width+eye.height)*0.25);
+            circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 4);
+        }
+    }
+
+    if (faces.size()==1) {
+        return faces[0];
+    } else {
+        return {};
     }
 }
 
@@ -157,37 +186,4 @@ int main(int argc, const char** argv)
 
     }
     return 0;
-}
-
-std::optional<cv::Rect>
-detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
-{
-    cv::Mat frame_gray;
-    cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
-    equalizeHist(frame_gray, frame_gray);
-
-    std::vector<cv::Rect> faces;
-    face_cascade.detectMultiScale(frame_gray, faces);
-
-    for (auto const& face: faces) {
-//        cv::Point center(face.x+face.width/2, face.y+face.height/2);
-        cv::rectangle(frame, face.tl(), face.br(), cv::Scalar(255, 0, 255));
-
-        cv::Mat faceROI = frame_gray(face);
-
-        std::vector<cv::Rect> eyes;
-        eyes_cascade.detectMultiScale(faceROI, eyes);
-
-        for (auto const& eye: eyes) {
-            cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
-            int radius = cvRound((eye.width+eye.height)*0.25);
-            circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 4);
-        }
-    }
-
-    if (faces.size()==1) {
-        return faces[0];
-    } else {
-        return {};
-    }
 }
