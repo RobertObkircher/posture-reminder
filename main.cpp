@@ -7,6 +7,25 @@
 
 std::optional<cv::Rect> detect(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade);
 
+#define BEEP_FILE "data/beep.wav"
+
+void beep()
+{
+    bool fallback = true;
+
+#ifdef __linux__
+    if(system("paplay " BEEP_FILE "&") == 0) {
+        fallback = false;
+    } else {
+
+    }
+#endif
+
+    if (fallback) {
+        std::cout << "\a" << std::flush;
+    }
+}
+
 int main(int argc, const char** argv)
 {
     cv::CommandLineParser parser(argc, argv,
@@ -53,6 +72,8 @@ int main(int argc, const char** argv)
 
     std::optional<cv::Rect> desired;
 
+    bool calibrate = true;
+
     cv::Mat frame;
     while (capture.read(frame)) {
         if (frame.empty()) {
@@ -72,12 +93,14 @@ int main(int argc, const char** argv)
         if (key==27) {
             break;
         } else if (key==' ') {
+            calibrate = true;
+        }
+
+        // TOOD use multiple positions to calibrate
+        if (calibrate && postion.has_value()) {
+            calibrate = false;
             desired = postion;
-            if (desired.has_value()) {
-                std::cout << "Set desired rectangle to " << *desired << "\n";
-            } else {
-                std::cout << "Cleared desired rectangle\n";
-            }
+            std::cout << "Set desired rectangle to " << *desired << "\n";
         }
 
         if (desired.has_value() && postion.has_value()) {
@@ -93,6 +116,9 @@ int main(int argc, const char** argv)
             auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
             auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
 
+            if (abs(deltay)>150 || abs(1-delta_size)>0.2) {
+                beep();
+            }
             std::cout << "deltax=" << deltax << " deltay=" << deltay << " delta_size=" << delta_size << "\n";
         } else if (desired.has_value()) {
             std::cout << "Could not find a face\n";
