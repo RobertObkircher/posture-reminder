@@ -46,7 +46,7 @@ detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::Casca
         for (auto const& eye: eyes) {
             cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
             int radius = cvRound((eye.width+eye.height)*0.25);
-            circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 4);
+            circle(frame, eye_center, radius, cv::Scalar(255, 0, 255), 2);
         }
     }
 
@@ -139,13 +139,16 @@ int main(int argc, const char** argv)
             average_position = average;
         }
 
+        for (const auto &pos : previous_positions) {
+//            cv::rectangle(frame, pos.tl(), pos.br(), cv::Scalar(255, 0,255), 1);
+        }
+        if (desired.has_value()) {
+            cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 255, 0), 6);
+        }
         if (average_position.has_value()) {
-            cv::rectangle(frame, average_position->tl(), average_position->br(), cv::Scalar(0, 255, 0));
+            cv::rectangle(frame, average_position->tl(), average_position->br(), cv::Scalar(255, 0,0), 3);
         }
 
-        if (desired.has_value()) {
-            cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 0, 255));
-        }
 
         imshow("Capture - Face detection", frame);
 
@@ -176,7 +179,7 @@ int main(int argc, const char** argv)
             auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
             auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
 
-            if (abs(deltay)>150 || abs(1-delta_size)>0.2) {
+            if (abs(deltay)>100 || abs(1-delta_size)>0.1) {
                 beep();
             }
             std::cout << "deltax=" << deltax << " deltay=" << deltay << " delta_size=" << delta_size << "\n";
