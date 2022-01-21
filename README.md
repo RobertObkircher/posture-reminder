@@ -54,6 +54,6 @@ cmake --build "build/Release"
 For multi-config-generators such as `Ninja Multi-Config` and `Visual Studio`:
 
 ```shell
-cmake -S . -B build
-cmake --build build --config Release
+cmake -S "." -B "build"
+cmake --build "build" --config Release
 ```
