@@ -128,6 +128,24 @@ enum class State {
     Sleeping, // requires "until"
 };
 
+constexpr const char* to_str(State state)
+{
+    switch (state) {
+    case State::Quit:
+        return "Quit";
+    case State::Calibrating:
+        return "Calibrating";
+    case State::Reset:
+        return "Reset";
+    case State::Checking:
+        return "Checking";
+    case State::Paused:
+        return "Paused";
+    case State::Sleeping:
+        return "Sleeping";
+    }
+}
+
 State handle_key(int key, State otherwise, State if_space, State if_p)
 {
     if (key==27 || key=='q') {
@@ -173,6 +191,9 @@ int main(int argc, const char** argv)
         return -1;
     };
 
+    const cv::String window_name = "posture_reminder";
+    cv::namedWindow(window_name);
+
     int camera_device = parser.get<int>("camera");
     cv::VideoCapture capture;
     cv::Mat frame;
@@ -180,7 +201,7 @@ int main(int argc, const char** argv)
     std::optional<cv::Rect> desired;
     std::chrono::time_point until = std::chrono::steady_clock::now();
 
-    State state = State::Reset;
+    State state = State::Calibrating;
 
     while (state!=State::Quit) {
         // process camera input
@@ -205,13 +226,13 @@ int main(int argc, const char** argv)
                         cv::rectangle(frame, history.average_position()->tl(), history.average_position()->br(),
                                 cv::Scalar(255, 0, 0), 3);
                     }
-                    imshow("posture_reminder", frame);
                 }
             }
         } else {
             capture.release();
         }
 
+        State previous = state;
         switch (state) {
         case State::Quit: {
             break;
@@ -274,6 +295,25 @@ int main(int argc, const char** argv)
             break;
         }
         }
+
+        if (cv::getWindowProperty(window_name, cv::WND_PROP_VISIBLE)==0) {
+            state = State::Quit;
+        } else if (state!=previous || state==State::Calibrating || state==State::Checking) {
+            if (frame.empty()) {
+                frame = cv::Mat::zeros(512, 512, CV_8UC3);
+            }
+            cv::putText(frame,
+                    to_str(state),
+                    cv::Point(30, 100),
+                    cv::HersheyFonts::FONT_HERSHEY_COMPLEX,
+                    2,
+                    cv::Scalar(255, 255, 255),
+                    2
+            );
+
+            imshow(window_name, frame);
+        }
+
     }
 
     return 0;
