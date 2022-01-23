@@ -171,7 +171,7 @@ int main(int argc, const char** argv)
     std::vector<cv::Rect> faces;
 
     // update
-    History history{10};
+    History history{5};
     std::optional<cv::Rect> desired;
     std::chrono::time_point until = std::chrono::steady_clock::now();
 
@@ -247,7 +247,7 @@ int main(int argc, const char** argv)
                 auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
                 auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
 
-                if (abs(deltay)>100 || abs(1-delta_size)>0.1) {
+                if (abs(deltay)>frame.rows / 10) {
 #ifdef HAS_PULSE
                     pulse_audio_thread.beep();
 #else
