@@ -3,26 +3,32 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/videoio.hpp"
 #include <iostream>
+#include <iterator>
+#include <fstream>
 #include <optional>
 #include <deque>
 
+#define APP_NAME "posture_reminder"
 #define BEEP_FILE "data/beep.wav"
 
-void beep()
-{
-    bool fallback = true;
+std::vector<u_int8_t> read_entire_file(const std::string& path);
 
-#ifdef __linux__
-    if (system("paplay " BEEP_FILE "&")==0) {
-        fallback = false;
-    } else {
-
-    }
+#ifdef HAS_PULSE
+#include "pulse.cpp"
 #endif
 
-    if (fallback) {
-        std::cout << "\a" << std::flush;
+std::vector<u_int8_t> read_entire_file(const std::string& path)
+{
+    std::vector<u_int8_t> contents;
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    file.unsetf(std::ios::skipws);
+    file.exceptions(std::ifstream::badbit);
+    if (file.is_open()) {
+        std::copy(std::istream_iterator<u_int8_t>(file), std::istream_iterator<u_int8_t>(),
+                std::back_inserter(contents));
+        file.close();
     }
+    return contents;
 }
 
 void open_capture(cv::VideoCapture& capture, int camera_device)
@@ -169,8 +175,13 @@ int main(int argc, const char** argv)
     std::optional<cv::Rect> desired;
     std::chrono::time_point until = std::chrono::steady_clock::now();
 
+    // audio
+#ifdef HAS_PULSE
+    PulseAudioThread pulse_audio_thread;
+#endif
+
     // drawing
-    const cv::String window_name = "posture_reminder";
+    const cv::String window_name = APP_NAME;
     cv::namedWindow(window_name);
     cv::Mat window;
 
@@ -237,7 +248,11 @@ int main(int argc, const char** argv)
                 auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
 
                 if (abs(deltay)>100 || abs(1-delta_size)>0.1) {
-                    beep();
+#ifdef HAS_PULSE
+                    pulse_audio_thread.beep();
+#else
+                    std::cout << "\a" << std::flush;
+#endif
                 }
                 std::cout << "deltax: " << deltax << ", deltay: " << deltay << " delta_size: " << delta_size << "\n";
             }
