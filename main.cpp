@@ -25,43 +25,6 @@ void beep()
     }
 }
 
-std::optional<cv::Rect>
-detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::CascadeClassifier& eyes_cascade)
-{
-    cv::Mat frame_gray;
-    cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
-
-    // This is commented out because it didn't work well in a dark environment.
-    // equalizeHist(frame_gray, frame_gray);
-
-    std::vector<cv::Rect> faces;
-    double scaleFactor = 1.1;
-    int minSize = cv::min(frame.cols, frame.rows) / 4;
-    int minNeighbors = 3;
-    face_cascade.detectMultiScale(frame_gray, faces, scaleFactor, minNeighbors, 0, cv::Size(minSize, minSize), cv::Size());
-
-    for (auto const& face: faces) {
-        cv::rectangle(frame, face.tl(), face.br(), cv::Scalar(255, 0, 255));
-
-        cv::Mat faceROI = frame_gray(face);
-
-        std::vector<cv::Rect> eyes;
-        eyes_cascade.detectMultiScale(faceROI, eyes);
-
-        for (auto const& eye: eyes) {
-            cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
-            int radius = cvRound((eye.width+eye.height)*0.25);
-            circle(frame, eye_center, radius, cv::Scalar(255, 0, 255), 2);
-        }
-    }
-
-    if (faces.size()==1) {
-        return faces[0];
-    } else {
-        return {};
-    }
-}
-
 void open_capture(cv::VideoCapture& capture, int camera_device)
 {
     capture.open(camera_device, cv::CAP_V4L2);
@@ -184,34 +147,37 @@ int main(int argc, const char** argv)
         return 0;
     }
 
-    //-- 1. Load the cascades
+    // camera
     cv::CascadeClassifier face_cascade;
     if (!face_cascade.load(cv::samples::findFile(parser.get<cv::String>("face_cascade")))) {
-        std::cout << "--(!)Error loading face cascade\n";
+        std::cout << "Error loading face cascade\n";
         return -1;
     }
-
     cv::CascadeClassifier eyes_cascade;
     if (!eyes_cascade.load(cv::samples::findFile(parser.get<cv::String>("eyes_cascade")))) {
-        std::cout << "--(!)Error loading eyes cascade\n";
+        std::cout << "Error loading eyes cascade\n";
         return -1;
     }
-
-    const cv::String window_name = "posture_reminder";
-    cv::namedWindow(window_name);
-
     int camera_device = parser.get<int>("camera");
     cv::VideoCapture capture;
     cv::Mat frame;
     cv::Mat frame_gray;
+    std::vector<cv::Rect> faces;
+
+    // update
     History history{10};
     std::optional<cv::Rect> desired;
     std::chrono::time_point until = std::chrono::steady_clock::now();
 
-    State state = State::Calibrating;
+    // drawing
+    const cv::String window_name = "posture_reminder";
+    cv::namedWindow(window_name);
+    cv::Mat window;
 
+    State state = State::Calibrating;
     while (state!=State::Quit) {
         // process camera input
+        faces.clear();
         if (state==State::Calibrating || state==State::Checking) {
             if (!capture.isOpened()) {
                 open_capture(capture, camera_device);
@@ -221,17 +187,13 @@ int main(int argc, const char** argv)
                 if (frame.empty()) {
                     std::cerr << "No captured frame!\n";
                 } else {
-                    std::optional<cv::Rect> position = detect_single_face(frame, face_cascade, eyes_cascade);
-                    if (position.has_value()) {
-                        history.add(*position);
-                    }
+                    cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
+                    // equalizeHist(frame_gray, frame_gray); // This didn't work well in a dark environment.
+                    int minSize = cv::min(frame.cols, frame.rows)/4;
+                    face_cascade.detectMultiScale(frame_gray, faces, 1.1, 3, 0, cv::Size(minSize, minSize), cv::Size());
 
-                    if (desired.has_value()) {
-                        cv::rectangle(frame, desired->tl(), desired->br(), cv::Scalar(0, 255, 0), 6);
-                    }
-                    if (history.average_position().has_value()) {
-                        cv::rectangle(frame, history.average_position()->tl(), history.average_position()->br(),
-                                cv::Scalar(255, 0, 0), 3);
+                    if (faces.size()==1) {
+                        history.add(faces[0]);
                     }
                 }
             }
@@ -239,6 +201,7 @@ int main(int argc, const char** argv)
             capture.release();
         }
 
+        // Process user input and update
         State previous = state;
         switch (state) {
         case State::Quit: {
@@ -303,22 +266,44 @@ int main(int argc, const char** argv)
         }
         }
 
+        // draw
         if (cv::getWindowProperty(window_name, cv::WND_PROP_VISIBLE)==0) {
             state = State::Quit;
         } else if (state!=previous || state==State::Calibrating || state==State::Checking) {
             if (frame.empty()) {
-                frame = cv::Mat::zeros(512, 512, CV_8UC3);
+                window.create(cv::Size(1920, 1080), CV_8UC3);
+            } else {
+                frame.copyTo(window);
             }
-            cv::putText(frame,
-                    to_str(state),
-                    cv::Point(30, 100),
-                    cv::HersheyFonts::FONT_HERSHEY_COMPLEX,
-                    2,
-                    cv::Scalar(255, 255, 255),
-                    2
-            );
 
-            imshow(window_name, frame);
+            for (auto const& face: faces) {
+                cv::rectangle(window, face.tl(), face.br(), cv::Scalar(255, 0, 255));
+
+                cv::Mat faceROI = frame_gray(face);
+
+                std::vector<cv::Rect> eyes;
+                eyes_cascade.detectMultiScale(faceROI, eyes);
+
+                for (auto const& eye: eyes) {
+                    cv::Point eye_center(face.x+eye.x+eye.width/2, face.y+eye.y+eye.height/2);
+                    int radius = cvRound((eye.width+eye.height)*0.25);
+                    circle(window, eye_center, radius, cv::Scalar(255, 0, 255), 2);
+                }
+            }
+
+            if (desired.has_value()) {
+                cv::rectangle(window, desired->tl(), desired->br(), cv::Scalar(0, 255, 0), 6);
+            }
+
+            if (history.average_position().has_value()) {
+                cv::rectangle(window, history.average_position()->tl(), history.average_position()->br(),
+                        cv::Scalar(255, 0, 0), 3);
+            }
+
+            cv::putText(window, to_str(state), cv::Point(30, 100),
+                    cv::HersheyFonts::FONT_HERSHEY_COMPLEX, 2, cv::Scalar(255, 255, 255), 2);
+
+            imshow(window_name, window);
         }
 
     }
