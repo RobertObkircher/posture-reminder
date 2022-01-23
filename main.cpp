@@ -196,6 +196,8 @@ int main(int argc, const char** argv)
                         history.add(faces[0]);
                     }
                 }
+            } else {
+                return -1;
             }
         } else {
             capture.release();
