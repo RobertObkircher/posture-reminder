@@ -30,10 +30,15 @@ detect_single_face(cv::Mat frame, cv::CascadeClassifier& face_cascade, cv::Casca
 {
     cv::Mat frame_gray;
     cvtColor(frame, frame_gray, cv::COLOR_BGR2GRAY);
-    equalizeHist(frame_gray, frame_gray);
+
+    // This is commented out because it didn't work well in a dark environment.
+    // equalizeHist(frame_gray, frame_gray);
 
     std::vector<cv::Rect> faces;
-    face_cascade.detectMultiScale(frame_gray, faces);
+    double scaleFactor = 1.1;
+    int minSize = cv::min(frame.cols, frame.rows) / 4;
+    int minNeighbors = 3;
+    face_cascade.detectMultiScale(frame_gray, faces, scaleFactor, minNeighbors, 0, cv::Size(minSize, minSize), cv::Size());
 
     for (auto const& face: faces) {
         cv::rectangle(frame, face.tl(), face.br(), cv::Scalar(255, 0, 255));
@@ -144,6 +149,7 @@ constexpr const char* to_str(State state)
     case State::Sleeping:
         return "Sleeping";
     }
+    throw std::runtime_error("unexpected enum value");
 }
 
 State handle_key(int key, State otherwise, State if_space, State if_p)
@@ -197,6 +203,7 @@ int main(int argc, const char** argv)
     int camera_device = parser.get<int>("camera");
     cv::VideoCapture capture;
     cv::Mat frame;
+    cv::Mat frame_gray;
     History history{10};
     std::optional<cv::Rect> desired;
     std::chrono::time_point until = std::chrono::steady_clock::now();
