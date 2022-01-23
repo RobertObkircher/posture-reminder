@@ -109,7 +109,7 @@ public:
             average.width += pos.width;
             average.height += pos.height;
         }
-        int size = m_positions.size();
+        int size = static_cast<int>(m_positions.size());
         average.x /= size;
         average.y /= size;
         average.width /= size;
@@ -189,13 +189,13 @@ int main(int argc, const char** argv)
     if (!face_cascade.load(cv::samples::findFile(parser.get<cv::String>("face_cascade")))) {
         std::cout << "--(!)Error loading face cascade\n";
         return -1;
-    };
+    }
 
     cv::CascadeClassifier eyes_cascade;
     if (!eyes_cascade.load(cv::samples::findFile(parser.get<cv::String>("eyes_cascade")))) {
         std::cout << "--(!)Error loading eyes cascade\n";
         return -1;
-    };
+    }
 
     const cv::String window_name = "posture_reminder";
     cv::namedWindow(window_name);
