@@ -54,11 +54,12 @@ class PulseAudioThread {
     std::thread thread;
 
     enum class AudioState {
-        Inactive,
-        Beep,
+        Waiting,
+        Sleeping,
+        Beeping,
         Exit,
     };
-    AudioState audio_state = AudioState::Inactive;
+    AudioState audio_state = AudioState::Waiting;
 
     void audio_thread_main()
     {
@@ -68,22 +69,33 @@ class PulseAudioThread {
             throw std::runtime_error("not a wav file");
         std::vector<u_int8_t> beep_data{beep_file.begin()+wav_header_size, beep_file.end()};
 
-        PulseAudioSimple audio;
+        std::optional<PulseAudioSimple> audio;
         while (true) {
             std::unique_lock<std::mutex> lock(audio_mutex);
             switch (audio_state) {
-            case AudioState::Inactive:
+            case AudioState::Waiting:
                 audio_cv.wait(lock);
                 break;
-            case AudioState::Beep:
-                audio_state = AudioState::Inactive;
+            case AudioState::Sleeping:
+                if (audio) {
+                    audio->drain();
+                    audio.reset();
+                }
+                audio_cv.wait(lock);
+                break;
+            case AudioState::Beeping:
+                audio_state = AudioState::Waiting;
                 lock.unlock();
-                if (!(audio.is_ok() && audio.write(beep_data))) { // do not drain here to avoid clicking
-                    std::cout << "\a" << std::flush;
+                if (!audio)
+                    audio.emplace();
+                if (!(audio->is_ok() && audio->write(beep_data))) { // do not drain here to avoid clicking
+                    stdout_beep();
                 }
                 break;
             case AudioState::Exit:
-                audio.drain();
+                if (audio) {
+                    audio->drain();
+                }
                 return;
             }
         }
@@ -92,8 +104,10 @@ class PulseAudioThread {
     void set_state(AudioState state)
     {
         std::unique_lock<std::mutex> lock(audio_mutex);
-        audio_state = state;
-        audio_cv.notify_all();
+        if (audio_state!=state) {
+            audio_state = state;
+            audio_cv.notify_all();
+        }
     }
 
 public:
@@ -105,7 +119,9 @@ public:
 
     ~PulseAudioThread() { join(); }
 
-    void beep() { set_state(AudioState::Beep); }
+    void sleep() { set_state(AudioState::Sleeping); }
+
+    void beep() { set_state(AudioState::Beeping); }
 
     void exit() { set_state(AudioState::Exit); }
 

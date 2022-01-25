@@ -13,8 +13,14 @@
 
 std::vector<u_int8_t> read_entire_file(const std::string& path);
 
+void stdout_beep() {
+    std::cout << "\a" << std::flush;
+}
+
 #ifdef HAS_PULSE
+
 #include "pulse.cpp"
+
 #endif
 
 std::vector<u_int8_t> read_entire_file(const std::string& path)
@@ -214,6 +220,12 @@ int main(int argc, const char** argv)
             capture.release();
         }
 
+#ifdef HAS_PULSE
+        if (state!=State::Checking) {
+            pulse_audio_thread.sleep();
+        }
+#endif
+
         // Process user input and update
         State previous = state;
         switch (state) {
@@ -247,11 +259,11 @@ int main(int argc, const char** argv)
                 auto deltay = (d.y+d.height/2)-(p.y+p.height/2);
                 auto delta_size = sqrt(d.width*d.height)/sqrt(p.width*p.height);
 
-                if (abs(deltay)>frame.rows / 10) {
+                if (abs(deltay)>frame.rows/10) {
 #ifdef HAS_PULSE
                     pulse_audio_thread.beep();
 #else
-                    std::cout << "\a" << std::flush;
+                    stdout_beep();
 #endif
                 }
                 std::cout << "deltax: " << deltax << ", deltay: " << deltay << " delta_size: " << delta_size << "\n";
