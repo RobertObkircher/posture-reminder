@@ -30,7 +30,7 @@ public:
     bool write(std::vector<uint8_t> buffer)
     {
         int error = 0;
-        if (pa_simple_write(s, buffer.data()+44, buffer.size(), &error)<0) {
+        if (pa_simple_write(s, buffer.data(), buffer.size(), &error)<0) {
             std::cerr << "pa_simple_write() failed: " << pa_strerror(error) << "\n";
             return false;
         }
