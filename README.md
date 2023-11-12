@@ -4,7 +4,7 @@ Uses face recognition to remind you to sit up straight
 
 ## Usage
 
-WARNING: This project is still a work in progress. For now it only works on my machine.
+**WARNING**: This project is still a work in progress. For now it only works on my machine. I've never tested it on windows.
 
 ![Webcam filming person sitting in front of computer](usage.png)
 
@@ -30,8 +30,8 @@ From now on the application will check it regularly and play a sound if your pos
 
 | Tool          | Description                  | OS      |
 |---------------|------------------------------|---------|
-| Visual Studio | Can simply open this project | Windows |
 | CLion         | Can simply open this project | any     |
+| Visual Studio | Can simply open this project | Windows |
 | cmake         | see below                    | any     |
 | g++           | `sh compile.sh`              | Linux   |
 
